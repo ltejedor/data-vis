@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- 
+      This is an HTML comment
+      You can write text in a comment and the content won't be visible in the page
+    -->
+
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!--
+      This is the page head - it contains info the browser uses
+      Like the title, which appears on the browser tab but not inside the page
+      Further down you'll see the content that displays in the page
+    -->
+    <title>Data visualization prototype</title>
+
+    <!-- The website stylesheet -->
+    <link rel="stylesheet" href="/style.css" />
+
+    <!-- The website JavaScript file -->
+    <script src="/script.js" defer></script>
+
+    <script src="https://d3js.org/d3.v4.js"></script>
+    <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+    <script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+    <script src="https://d3js.org/d3-hexbin.v0.2.min.js"></script>
+
+
+    <!-- for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+    <!--HEX vis-->
+
+    <script>
+      window.onload = function() {
+
+        // ----- MAP -------
+        var width = 550,
+          height = 400;
+        
+        // The svg
+        var svg = d3.select("#hex-geo")
+            .attr("width", width)
+            .attr("height", height)
+        
+        // Define the color scale
+        var color = d3.scaleSequential(d3.interpolateViridis)
+            .domain([0, 25000]); // Maximum value for color
+        
+        // Define the hexbin layout
+        var hexbin = d3.hexbin()
+            .radius(18)
+            .extent([[0, 0], [width, height]]);
+
+        var margin = hexbin.radius() * Math.sqrt(3);
+
+        // Draw clear hexbins for the background
+        var hexbinPoints = [];
+        for (var x = margin; x < width - margin; x += hexbin.radius() * Math.sqrt(3)) {
+            for (var y = margin; y < height - margin; y += hexbin.radius() * 1.5) {
+                hexbinPoints.push([x, y]);
+            }
+        }
+
+        svg.append("g")
+            .attr("class", "hexagon")
+            .selectAll("path")
+            .data(hexbin(hexbinPoints))
+            .enter().append("path")
+            .attr("d", hexbin.hexagon())
+            .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+            .attr("fill", "#fff")
+            .attr("stroke", "#ddd")
+            .on("mouseover", function (d, i) { // When mouse enters the hexagon
+                d3.select(this)
+                    .attr('fill',"#f2f2f2")
+                  })
+              .on("mouseout", function (d, i) { // When mouse leaves the hexagon
+                  d3.select(this)
+                      .attr('fill', "#fff")
+              });
+
+        // Load external data and boot
+        d3.csv("/data/data.csv", function(data){
+
+          var lonScale = d3.scaleLinear()
+              .domain(d3.extent(data, function(d) { return +d.Longitude; }).map((v, i, a) => v + (i === 0 ? -1 : 1) * Math.abs(v - a[1]) * 0.05))
+              .range([0, width-20]);
+          
+          var latScale = d3.scaleLinear()
+              .domain(d3.extent(data, function(d) { return +d.Latitude; }).map((v, i, a) => v + (i === 0 ? -1 : 1) * Math.abs(v - a[1]) * 0.05))
+              .range([height, 20]); // Inverted to account for SVG coordinate system
+
+          var points = data.map(function(d) {return [lonScale(+d.Longitude), latScale(+d.Latitude), +d.debt_dollars]; });
+        
+          // Draw the hexbins
+          var hexagon = svg.append("g")
+              .attr("class", "hexagon")
+              .selectAll("path")
+              .data(hexbin(points))
+              .enter().append("path")
+              .attr("d", hexbin.hexagon())
+              .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+              .attr("fill", function(d) { 
+                  var totalDebt = d3.sum(d, function(d) { return d[2]; });
+                  return color(totalDebt); 
+              })
+              .on("mouseover", function (d, i) { // When mouse enters the hexagon
+                d3.select(this)
+                    .attr('fill', function(d) {
+                        var totalDebt = d3.sum(d, function(d) { return d[2]; });
+                        return d3.rgb(color(totalDebt)).darker(.8); // Make it darker
+                    });
+                  })
+              .on("mouseout", function (d, i) { // When mouse leaves the hexagon
+                  d3.select(this)
+                      .attr('fill', function(d) {
+                          var totalDebt = d3.sum(d, function(d) { return d[2]; });
+                          return color(totalDebt); // Return to original color
+                      });
+              });
+
+          
+          // Add tooltips
+          hexagon.append("title")
+            .text(function(d) { 
+              var totalDebt = d3.sum(d, function(d) { return d[2]; });
+              return "Total debt: $" + totalDebt + " from " + d.length + " entries"; 
+            });
+
+          })
+
+
+
+
+          // -------- X-Y -----------
+
+          var margin = {top: 10, right: 30, bottom: 30, left: 40}, 
+          widthxy = 550-margin.left-margin.right,
+          heightxy = 400-margin.top-margin.bottom;
+        
+          // The svg
+          var svgxy = d3.select("#hex-xy")  .append("svg")
+            .attr("width", widthxy + margin.left + margin.right)
+            .attr("height", heightxy + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform",
+                  "translate(" + margin.left + "," + margin.top + ")");
+                
+            // read data
+            d3.csv("/data/costvsdebt.csv", function(data) {
+              var data_x = data.map(function(d) { return +d.x; }); // the '+' sign converts string to number if necessary
+              var data_y = data.map(function(d) { return +d.y; }); // the '+' sign converts string to number if necessary
+            
+            // Add X axis
+            var x = d3.scaleLinear()
+              .domain(d3.extent(data_x))
+              .range([ 0, widthxy ]);
+            svgxy.append("g")
+              .attr("transform", "translate(0," + heightxy + ")")
+              .call(d3.axisBottom(x));
+
+            // Add Y axis
+            var y = d3.scaleLinear()
+              .domain(d3.extent(data_y))
+              .range([ heightxy, 0 ]);
+            svgxy.append("g")
+              .call(d3.axisLeft(y));
+
+            // Reformat the data: d3.hexbin() needs a specific format
+            var inputForHexbinFun = []
+            data.forEach(function(d) {
+              inputForHexbinFun.push( [x(d.x), y(d.y)] ) // Note that we had the transform value of X and Y !
+            })
+
+            // Prepare a color palette
+            var color = d3.scaleLinear()
+                .domain([0, 5]) // Number of points in the bin?
+                .range(["transparent",  "#69b3a2"])
+
+            // Compute the hexbin data
+            var hexbin = d3.hexbin()
+              .radius(15) // size of the bin in px
+              .extent([ [0, 0], [widthxy, heightxy] ])
+
+            // Plot the hexbins
+            svgxy.append("clipPath")
+                .attr("id", "clip")
+              .append("rect")
+                .attr("width", widthxy)
+                .attr("height", heightxy)
+
+            svgxy.append("g")
+              .attr("clip-path", "url(#clip)")
+              .selectAll("path")
+              .data( hexbin(inputForHexbinFun) )
+              .enter().append("path")
+                .attr("d", hexbin.hexagon())
+                .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+                .attr("fill", function(d) { return color(d.length); })
+                .attr("stroke", "black")
+                .attr("stroke-width", "0.1")
+                .append("title")
+                  .text(function(d) { 
+                    return d.length; 
+                  });
+            })
+
+      }
+      
+      </script>
+
+  
+  </head>
+  <body>
+    
+    <div class="container">
+      <h1 class="title">Data visualization prototype</h1>
+      <div id="messages"></div>
+      <form id="message-form">
+          <input type="text" id="message-input" placeholder="Type your message...">
+          <button class="submit-button" type="submit">Send</button>
+      </form>
+    </div>
+
+    <div class="container">
+      <h1>Geo Hex Map</h1>
+
+        <svg id="hex-geo"></svg>      
+    </div>
+
+    <div class="container">
+      <h1>X-Y Hex Map</h1>
+
+      <div id="hex-xy"></div> 
+    </div>
+
+  </body>
+</html>
