@@ -134,7 +134,6 @@
 
 
 
-
           // -------- X-Y -----------
 
           var margin = {top: 10, right: 30, bottom: 30, left: 40}, 
@@ -187,10 +186,10 @@
 
             // Plot the hexbins
             svgxy.append("clipPath")
-                .attr("id", "clip")
+              .attr("id", "clip")
               .append("rect")
-                .attr("width", widthxy)
-                .attr("height", heightxy)
+              .attr("width", widthxy)
+              .attr("height", heightxy)
 
             svgxy.append("g")
               .attr("clip-path", "url(#clip)")
@@ -206,6 +205,121 @@
                   .text(function(d) { 
                     return d.length; 
                   });
+            })
+
+
+
+
+            /*---------- HEX Reasons for leaving -------------*/ 
+
+            
+            widthxy2 = 550
+            heightxy2 = 500
+          
+            // The svg
+            var svgxy2 = d3.select("#hex-motivations").append("svg")
+              .attr("width", widthxy2 + margin.left + margin.right)
+              .attr("height", heightxy2 + margin.top + margin.bottom)
+              .append("g")
+              .attr("transform",
+                    "translate(" + margin.left + "," + margin.top + ")");
+
+            d3.csv("/data/motivations-2.csv", function(data){
+                
+              var data_x = data.map(function(d) { return +d.x; }); // the '+' sign converts string to number if necessary
+              var data_y = data.map(function(d) { return +d.y; }); // the '+' sign converts string to number if necessary
+                
+                // Add X axis
+                var x = d3.scaleLinear()
+                  .domain([0, 10])
+                  .range([ 0, widthxy2 ]);
+                svgxy2.append("g")
+                  .attr("transform", "translate(0," + heightxy2 + ")")
+
+
+                // Add Y axis
+                var y = d3.scaleLinear()
+                  .domain([0, 10])
+                  .range([ heightxy2, 0 ]);
+                svgxy2.append("g")
+
+
+                // Reformat the data: d3.hexbin() needs a specific format
+                var inputForHexbinFun = []
+                data.forEach(function(d) {
+                  inputForHexbinFun.push( {x: x(d.x), y: y(d.y), group: d.group, group_name: d.group_name, total: d.total} ) // Note that we had the transform value of X and Y !
+                })
+
+
+                // Prepare a color palette
+                var color = d3.scaleOrdinal()
+                  .domain(['A', 'B', 'C', 'D', 'E', 'F', 'G'])
+                  .range(["#e11569", "#34bdb6", "#ffd000", "#2e459c", "#ed1c24", "#00ac4e", "#7d2a90"]);
+
+                // Compute the hexbin data
+                var hexbin = d3.hexbin()
+                  .x(d => d.x)
+                  .y(d => d.y)
+                  .radius(32) // size of the bin in px
+                  .extent([ [0, 0], [widthxy2, heightxy2] ])
+
+
+                var margin_local = hexbin.radius() * Math.sqrt(3);
+
+                // Draw clear hexbins for the background
+                var hexbinPoints = [];
+                for (var x = margin_local; x < widthxy2 - margin_local; x += hexbin.radius() * Math.sqrt(3)) {
+                    for (var y = margin_local; y < heightxy2 - margin_local; y += hexbin.radius() * 1.5) {
+                        hexbinPoints.push({x: x, y: y});
+                    }
+                }
+
+                svgxy2.append("g")
+                    .attr("class", "hexagon")
+                    .selectAll("path")
+                    .data(hexbin(hexbinPoints))
+                    .enter().append("path")
+                    .attr("d", hexbin.hexagon())
+                    .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+                    .attr("fill", "#fff")
+                    .attr("stroke", "#ddd")
+                    .on("mouseover", function (d, i) { // When mouse enters the hexagon
+                        d3.select(this)
+                            .attr('fill',"#f2f2f2")
+                          })
+                      .on("mouseout", function (d, i) { // When mouse leaves the hexagon
+                          d3.select(this)
+                              .attr('fill', "#fff")
+                      });
+
+                  svgxy2.append("g")
+                  .selectAll("path")
+                  .data( hexbin(inputForHexbinFun) )
+                  .enter().append("path")
+                    .attr("d", hexbin.hexagon())
+                    .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+                    .attr("fill", function(d) { return color(d[0].group); })
+                    .attr("stroke", "white")
+                    .attr("stroke-width", "0.1")
+                    .on("mouseover", function (d, i) { // When mouse enters the hexagon
+                        d3.select(this)
+                          .attr('fill', function(d) {
+                            return d3.rgb(color(d[0].group)).darker(.7);
+                          })
+                    })
+                    .on("mouseout", function (d, i) { // When mouse leaves the hexagon
+                        d3.select(this)
+                            .attr('fill', function(d) {
+                              return color(d[0].group);
+                      })
+                    })
+
+
+                    .append("title")
+                      .text(function(d) { 
+                        return d[0].group_name + ", Total: " + d[0].total; 
+                      })
+
             })
 
       }
@@ -232,9 +346,15 @@
     </div>
 
     <div class="container">
-      <h1>X-Y Hex Map</h1>
+      <h1>X-Y Hex Map: Debt vs Income</h1>
 
       <div id="hex-xy"></div> 
+    </div>
+
+    <div class="container">
+      <h1>Hex Map: Reasons for Migrating</h1>
+
+      <div id="hex-motivations"></div> 
     </div>
 
   </body>
